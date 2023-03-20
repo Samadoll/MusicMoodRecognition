@@ -5,3 +5,4 @@ other/
 *.csv
 *.json
 __pycache__
+*.wav
