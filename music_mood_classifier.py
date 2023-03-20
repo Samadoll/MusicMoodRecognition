@@ -20,11 +20,13 @@ class Music_Model:
     
     def __init__(self, hop_length=512, num_fft=2048, num_mfcc=20):
         # Default Values
-        self._moods = ["aggressive", "dramatic", "happy", "romantic", "sad"]
-        self._audio_source_path = "music_mood/"
-        self._data_source_path = "ProcessedData/"
-        self._audio_class_source = f"{self._data_source_path}baseInfo.csv"
+        # 2500 for small (S), 10133 for large (L)
         self._total = 2500
+        self._tag = "S"
+        self._moods = ["aggressive", "dramatic", "happy", "romantic", "sad"]
+        self._audio_source_path = f"music_mood_{self._tag}/"
+        self._data_source_path = "ProcessedData/"
+        self._audio_class_source = f"{self._data_source_path}baseInfo_{self._tag}.csv"
         self._sample_rate = 44100
 
         # Variables
@@ -81,7 +83,7 @@ class Music_Model:
         
 
     def get_mfcc_source(self):
-        return f"{self._data_source_path}mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}.json"
+        return f"{self._data_source_path}mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
     def generate_spectrogram(self):
