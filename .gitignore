@@ -3,3 +3,4 @@ music_mood/
 other/
 *.csv
 *.json
+__pycache__
