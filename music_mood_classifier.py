@@ -119,7 +119,7 @@ class Music_Model:
         print(f"Training {name}...")
         X_train, X_val, X_test, y_train, y_val, y_test = self.split_NN_data(X, y)
         model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=20, batch_size=32, verbose=1)
+        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=50, batch_size=32, verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
         # self.plot_NN_history(history)
@@ -141,6 +141,7 @@ class Music_Model:
             LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
             LSTM(64),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
             Dense(len(self._moods), activation="softmax")
         ])
         self._NN(model, X, y, "LSTM NN")
