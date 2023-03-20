@@ -30,13 +30,16 @@ class Music_Model:
         self._sample_rate = 44100
 
         # Variables
+        self._audio_class_info = self.load_class_info()
         self._hop_length = hop_length
         self._num_fft = num_fft
         self._num_mfcc = num_mfcc
         self._audio_mfcc_source = self.get_mfcc_source()
-        self._audio_class_info = self.load_class_info()
-        
+        self._audio_mel_spec_source = self.get_mel_spec_source()
 
+    #####################################
+    #           Data Process            #
+    ##################################### 
 
     def load_class_info(self):
         if not os.path.exists(self._audio_class_source):
@@ -53,45 +56,57 @@ class Music_Model:
         print(f"{self._audio_class_source} Created...")
 
 
-    def load_mfcc(self):
-        if not os.path.exists(self._audio_mfcc_source):
-            self.create_mfcc()
-        with open(self._audio_mfcc_source, "r") as mfcc_file:
-            data = json.load(mfcc_file)
-            mfccs = np.array(data["mfcc"])
+    def load_feature(self, path, feat_name):
+        if not os.path.exists(path):
+            self.extract_feature(path, feat_name)
+        with open(path, "r") as feat_file:
+            data = json.load(feat_file)
+            feat = np.array(data[feat_name])
             moods = np.array(list(map(self._moods.index, data["mood"])))
-        print(f"{self.get_mfcc_source()} Loaded...")
-        return mfccs, moods
+        print(f"{path} Loaded...")
+        return feat, moods
 
 
-    def create_mfcc(self):
+    def extract_feature(self, feat_path, feat_name):
         data = {
-            "mfcc": [],
+            feat_name: [],
             "mood": []
         }
-        with tqdm(total=self._total, desc="Processing MFCC") as pbar:
+        with tqdm(total=self._total, desc=f"Processing {feat_name}") as pbar:
             for audio, path, label in self._audio_class_info.itertuples(index=False):
                 signal, sample_rate = librosa.load(path, sr=self._sample_rate)
-                mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
-                data["mfcc"].append(mfcc.tolist())
+                feat = self.get_feat(feat_name, signal, sample_rate)
+                data[feat_name].append(feat.tolist())
                 data["mood"].append(label)
                 pbar.update(1)
         
-        with open(self._audio_mfcc_source, "w") as mfcc_file:
-            json.dump(data, mfcc_file, indent=2)
-        print(f"{self.get_mfcc_source()} Created...")
-        
+        with open(feat_path, "w") as feat_file:
+            json.dump(data, feat_file, indent=2)
+        print(f"{feat_path} Created...")
+
+
+    def get_feat(self, feat_name, signal, sample_rate):
+        if feat_name == "mfcc":
+            return librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
+        if feat_name == "mel_spec":
+            return librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+
 
     def get_mfcc_source(self):
         return f"{self._data_source_path}mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
-    def generate_spectrogram(self):
-        pass
+    def get_mel_spec_source(self):
+        return f"{self._data_source_path}melspec_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
     def generate_wavelet(self):
         pass
+
+
+    #####################################
+    #              Model                #
+    ##################################### 
 
 
     def plot_NN_history(self, history):
@@ -165,15 +180,23 @@ class Music_Model:
         self._NN(model, X, y, "CNN")
 
 
-    def run_mfcc_NN(self):
-        X, y = self.load_mfcc()
+    def run_NN(self, X, y):
         self.normal_NN(X, y)
         self.lstm_NN(X, y)
         self.cnn(X, y)
 
+    def run_mfcc_NN(self):
+        X, y = self.load_feature(self._audio_mfcc_source, "mfcc")
+        self.run_NN(X, y)
+
+
+    def run_mel_spectrogram_NN(self):
+        X, y = self.load_feature(self._audio_mel_spec_source, "mel_spec")
+        self.run_NN(X, y)
 
     def run(self):
         self.run_mfcc_NN()
+        self.run_mel_spectrogram_NN()
         
     
 
