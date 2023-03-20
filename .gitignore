@@ -1,5 +1,6 @@
 .DS_Store
 music_mood/
+music_mood_large/
 other/
 *.csv
 *.json
