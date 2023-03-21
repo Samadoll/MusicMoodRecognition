@@ -6,6 +6,7 @@ import librosa
 import pandas as pd
 import matplotlib.pyplot as plt
 import json
+import glob
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
@@ -15,6 +16,8 @@ from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 import matplotlib.pyplot as plt
 from keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import VGG16
+import tensorflow as tf
 
 
 class Music_Model:
@@ -66,12 +69,14 @@ class Music_Model:
     ##################################### 
 
     def load_feature(self, path, feat_name):
+        data = None
         if not os.path.exists(path):
-            self.extract_feature(path, feat_name)
-        with open(path, "r") as feat_file:
-            data = json.load(feat_file)
-            feat = np.array(data[feat_name])
-            moods = np.array(list(map(self._moods.index, data["mood"])))
+            data = self.extract_feature(path, feat_name)
+        if data == None:
+            with open(path, "r") as feat_file:
+                data = json.load(feat_file)
+        feat = np.array(data[feat_name])
+        moods = np.array(list(map(self._moods.index, data["mood"])))
         print(f"{path} Loaded...")
         return feat, moods
 
@@ -92,6 +97,7 @@ class Music_Model:
         with open(feat_path, "w") as feat_file:
             json.dump(data, feat_file, indent=2)
         print(f"{feat_path} Created...")
+        return data
 
 
     def get_feat(self, feat_name, signal, sample_rate):
@@ -197,7 +203,7 @@ class Music_Model:
         signal, sample_rate = librosa.load(path, sr=self._sample_rate)
         mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
         mel_db = librosa.power_to_db(mel, ref=np.max)
-        plt.figure(figsize=(10, 4))
+        # plt.figure(figsize=(10, 4))
         librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
         plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
         fig = plt.gcf()
@@ -347,7 +353,7 @@ class Music_Model:
         test_set = test_datagen.flow_from_directory(f"{self._mel_spectrograms_path}test", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
 
         model = model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=(300, 300, 3)),
+            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=target_dim + (3, )),
             MaxPooling2D(2, padding="same"),
             Conv2D(64, (3, 3), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
@@ -365,10 +371,42 @@ class Music_Model:
         history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
         loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
         print(f"Accuracy: {acc}")
+        return loss, acc
         
+    
+    def run_vgg16_melspec_img_NN(self):
+        img_folder = f"{self._mel_spectrograms_path}all/"
+        if not os.path.exists(img_folder):
+            os.makedirs(img_folder)
+            self.generate_melspectrogram()
+        imgs = []
+        mood = []
+        for img in glob.glob(f"{img_folder}*.png"):
+            img_name = img.replace(img_folder, "")
+            image=np.array(tf.keras.preprocessing.image.load_img(img, color_mode='rgb', target_size=(640,480)))
+            imgs.append(image)
+            mood.append(self._moods.index(img_name[0:img_name.index("_")]))
+        X = np.array(imgs)
+        y = np.array(mood)
+        print("Data Loaded...")
+        vgg16_model = VGG16(weights='imagenet', include_top=False, input_shape=X.shape[1:])
+        model = Sequential([
+            vgg16_model,
+            Flatten(),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(len(self._moods), activation="softmax")
+        ])
+        for layer in vgg16_model.layers:
+            layer.trainable = False
+        return self._NN(model, X, y, "VGG16_CNN")
+
 
     def run_melspectrogram_img(self):
-        self.run_melspectrogram_img_ImageGenerator()
+        # self.run_melspectrogram_img_ImageGenerator()
+        self.run_vgg16_melspec_img_NN()
 
 
     #####################################
@@ -389,4 +427,4 @@ class Music_Model:
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.run_melspectrogram_img()
+model1.split_images()
