@@ -11,9 +11,10 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D
-from keras.optimizers import Adam
+from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 import matplotlib.pyplot as plt
+from keras.preprocessing.image import ImageDataGenerator
 
 
 class Music_Model:
@@ -26,6 +27,7 @@ class Music_Model:
         self._moods = ["aggressive", "dramatic", "happy", "romantic", "sad"]
         self._audio_source_path = f"music_mood_{self._tag}/"
         self._data_source_path = "ProcessedData/"
+        self._mel_spectrograms_path = "ProcessedData/melspectrograms/"
         self._audio_class_source = f"{self._data_source_path}baseInfo_{self._tag}.csv"
         self._sample_rate = 44100
 
@@ -160,25 +162,56 @@ class Music_Model:
     ##################################### 
 
     def generate_melspectrogram(self):
+        img_folder = f"{self._mel_spectrograms_path}all/"
+        if not os.path.exists(img_folder):
+            os.makedirs(img_folder)
         count = 0
         with tqdm(total=self._total, desc=f"Generating MelSpectrograms...") as pbar:
             for audio, path, label in self._audio_class_info.itertuples(index=False):
                 count += 1
-                signal, sample_rate = librosa.load(path, sr=self._sample_rate)
-                mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
-                mel_db = librosa.power_to_db(mel, ref=np.max)
-                # Display the spectrogram
-                plt.figure(figsize=(10, 4))
-                librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
-                plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
-                fig = plt.gcf()
-                fig.savefig(f'{self._data_source_path}melspectrograms/{label}_{count}.png')
-                plt.close()
+                self.generate_img_helper(img_folder, path, label, count)
                 pbar.update(1)
 
 
+    def split_images(self):
+        X_train, X_test, y_train, y_test = train_test_split(self._audio_class_info.iloc[:,:-1], self._audio_class_info.iloc[:,-1], test_size=0.2, random_state=42)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+        self.split_images_helper(X_train["audio_path"], y_train, "train")
+        self.split_images_helper(X_val["audio_path"], y_val, "valid")
+        self.split_images_helper(X_test["audio_path"], y_test, "test")
+
+
+    def split_images_helper(self, x, y, tag):
+        count = 0
+        with tqdm(total=len(x), desc=f"Generating {tag} MelSpectrograms...") as pbar:
+            for path, label in zip(x, y):
+                img_folder = f"{self._mel_spectrograms_path}{tag}/{label}/"
+                if not os.path.exists(img_folder):
+                    os.makedirs(img_folder)
+                count += 1
+                self.generate_img_helper(img_folder, path, label, count)
+                pbar.update(1)
+
+
+    def generate_img_helper(self, folder, path, label, count):
+        signal, sample_rate = librosa.load(path, sr=self._sample_rate)
+        mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+        mel_db = librosa.power_to_db(mel, ref=np.max)
+        plt.figure(figsize=(10, 4))
+        librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
+        plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+        fig = plt.gcf()
+        fig.savefig(f'{folder}{label}_{count}.png')
+        plt.clf()
+        plt.close()
+
+
+    def load_melspectrogram(self):
+        return pd.read_csv(self._audio_class_source)
+
+
     #####################################
-    #              Model                #
+    #      Model - Feature-based        #
     ##################################### 
 
     def plot_NN_history(self, history):
@@ -198,7 +231,7 @@ class Music_Model:
 
     def split_NN_data(self, X, y):
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
         return X_train, X_val, X_test, y_train, y_val, y_test
 
 
@@ -212,10 +245,6 @@ class Music_Model:
         # self.plot_NN_history(history)
         return test_loss, test_acc
 
-
-    #####################################
-    #      Model - Feature-based        #
-    ##################################### 
 
     def normal_NN_1D(self, X, y):
         model = Sequential([
@@ -280,6 +309,7 @@ class Music_Model:
         X, y = self.load_feature(self._audio_mel_spec_source, "mel_spec")
         return self.run_NN(X, y)
 
+
     def run_mel_mfcc_NN(self):
         X, y = self.load_feature(self._audio_mel_mfcc_source, "mel_spec_mfcc")
         return self.run_NN(X, y)
@@ -293,7 +323,49 @@ class Music_Model:
     def run_feat_mean_var_NN(self):
         X, y = self.load_feature(self._audio_feat_mean_var_source, "feat_mean_var")
         return [self.normal_NN_1D(X, y)]
+
+
+    #####################################
+    #        Model - Image-based        #
+    ##################################### 
+
+    def run_melspectrogram_img_ImageGenerator(self):
+        train_datagen = ImageDataGenerator(rescale=1./255, rotation_range=20, zoom_range=0.2, horizontal_flip=True)
+        val_datagen = ImageDataGenerator(rescale=1./255)
+        test_datagen = ImageDataGenerator(rescale=1./255)
+        train_set = train_datagen.flow_from_directory(f"{self._mel_spectrograms_path}train", target_size=(1000, 400), batch_size=32, class_mode='categorical')
+        val_set = val_datagen.flow_from_directory(f"{self._mel_spectrograms_path}valid", target_size=(1000, 400), batch_size=32, class_mode='categorical')
+        test_set = test_datagen.flow_from_directory(f"{self._mel_spectrograms_path}test", target_size=(1000, 400), batch_size=32, class_mode='categorical')
+
+        print(train_set)
+        model = model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=(1000, 400, 3)),
+            MaxPooling2D(2, padding="same"),
+            Conv2D(64, (3, 3), activation='relu', padding="valid"),
+            MaxPooling2D(2, padding="same"),
+            Dropout(0.3),
+            Conv2D(128, (3, 3), activation='relu', padding="valid"),
+            MaxPooling2D(2, padding="same"),
+            Dropout(0.3),
+            GlobalAveragePooling2D(),
+            Flatten(),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dense(len(self._moods), activation="softmax")
+        ])
+
+        model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
+        history = model.fit(train_set, steps_per_epoch=100, epochs=30, validation_data=val_set, validation_steps=50, verbose=2)
+        loss, acc = model.evaluate(test_set, steps=len(test_set))
+        print(f"Accuracy: {acc}")
         
+
+    def run_melspectrogram_img(self):
+        self.run_melspectrogram_img_ImageGenerator()
+
+
+    #####################################
+    #               Run                 #
+    ##################################### 
 
     def run(self):
         data = {
@@ -309,4 +381,4 @@ class Music_Model:
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.generate_melspectrogram()
+model1.run_melspectrogram_img()
