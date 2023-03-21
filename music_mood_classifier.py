@@ -335,7 +335,7 @@ class Music_Model:
     #        Model - Image-based        #
     ##################################### 
 
-    def run_melspectrogram_img_ImageGenerator(self):
+    def melspectrogram_img_ImageGenerator_pre(self):
         if not os.path.exists(self._mel_spectrograms_path):
             self.split_images()
 
@@ -351,7 +351,12 @@ class Music_Model:
         train_set = train_datagen.flow_from_directory(f"{self._mel_spectrograms_path}train", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
         val_set = val_datagen.flow_from_directory(f"{self._mel_spectrograms_path}valid", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
         test_set = test_datagen.flow_from_directory(f"{self._mel_spectrograms_path}test", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
+        
+        return batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set
 
+
+    def run_melspectrogram_img_ImageGenerator(self):
+        batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set = self.melspectrogram_img_ImageGenerator_pre()
         model = model = Sequential([
             Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=target_dim + (3, )),
             MaxPooling2D(2, padding="same"),
@@ -366,7 +371,6 @@ class Music_Model:
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
             Dense(len(self._moods), activation="softmax")
         ])
-
         model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
         history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
         loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
@@ -404,9 +408,32 @@ class Music_Model:
         return self._NN(model, X, y, "VGG16_CNN")
 
 
+    def run_vgg16_melspec_ImageGenerator_NN(self):
+        batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set = self.melspectrogram_img_ImageGenerator_pre()
+        vgg16_model = VGG16(weights='imagenet', include_top=False, input_shape=target_dim + (3,))
+        model = Sequential([
+            vgg16_model,
+            Flatten(),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(len(self._moods), activation="softmax")
+        ])
+        for layer in vgg16_model.layers:
+            layer.trainable = False
+
+        model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
+        history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
+        loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
+        print(f"Accuracy: {acc}")
+        return loss, acc
+
+
     def run_melspectrogram_img(self):
         # self.run_melspectrogram_img_ImageGenerator()
-        self.run_vgg16_melspec_img_NN()
+        # self.run_vgg16_melspec_img_NN()
+        self.run_vgg16_melspec_ImageGenerator_NN()
 
 
     #####################################
@@ -427,4 +454,4 @@ class Music_Model:
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.split_images()
+model1.run_melspectrogram_img()
