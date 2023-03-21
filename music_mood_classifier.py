@@ -330,16 +330,24 @@ class Music_Model:
     ##################################### 
 
     def run_melspectrogram_img_ImageGenerator(self):
+        if not os.path.exists(self._mel_spectrograms_path):
+            self.split_images()
+
+        batch_size = 16
+        train_size = 1600
+        val_size = 400
+        test_size = 500
+        target_dim = (300, 300)
+        
         train_datagen = ImageDataGenerator(rescale=1./255, rotation_range=20, zoom_range=0.2, horizontal_flip=True)
         val_datagen = ImageDataGenerator(rescale=1./255)
         test_datagen = ImageDataGenerator(rescale=1./255)
-        train_set = train_datagen.flow_from_directory(f"{self._mel_spectrograms_path}train", target_size=(1000, 400), batch_size=32, class_mode='categorical')
-        val_set = val_datagen.flow_from_directory(f"{self._mel_spectrograms_path}valid", target_size=(1000, 400), batch_size=32, class_mode='categorical')
-        test_set = test_datagen.flow_from_directory(f"{self._mel_spectrograms_path}test", target_size=(1000, 400), batch_size=32, class_mode='categorical')
+        train_set = train_datagen.flow_from_directory(f"{self._mel_spectrograms_path}train", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
+        val_set = val_datagen.flow_from_directory(f"{self._mel_spectrograms_path}valid", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
+        test_set = test_datagen.flow_from_directory(f"{self._mel_spectrograms_path}test", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
 
-        print(train_set)
         model = model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=(1000, 400, 3)),
+            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=(300, 300, 3)),
             MaxPooling2D(2, padding="same"),
             Conv2D(64, (3, 3), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
@@ -354,8 +362,8 @@ class Music_Model:
         ])
 
         model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(train_set, steps_per_epoch=100, epochs=30, validation_data=val_set, validation_steps=50, verbose=2)
-        loss, acc = model.evaluate(test_set, steps=len(test_set))
+        history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
+        loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
         print(f"Accuracy: {acc}")
         
 
