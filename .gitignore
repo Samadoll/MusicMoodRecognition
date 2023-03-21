@@ -5,3 +5,4 @@ other/
 *.json
 __pycache__
 *.wav
+*.zip

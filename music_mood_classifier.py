@@ -36,6 +36,9 @@ class Music_Model:
         self._num_mfcc = num_mfcc
         self._audio_mfcc_source = self.get_mfcc_source()
         self._audio_mel_spec_source = self.get_mel_spec_source()
+        self._audio_mel_mfcc_source = self.get_mel_mfcc_source()
+        self._audio_multifeat_source = self.get_multifeat_source()
+        self._audio_feat_mean_var_source = self.get_feat_mean_var_source()
 
     #####################################
     #           Data Process            #
@@ -76,7 +79,7 @@ class Music_Model:
             for audio, path, label in self._audio_class_info.itertuples(index=False):
                 signal, sample_rate = librosa.load(path, sr=self._sample_rate)
                 feat = self.get_feat(feat_name, signal, sample_rate)
-                data[feat_name].append(feat.tolist())
+                data[feat_name].append(feat)
                 data["mood"].append(label)
                 pbar.update(1)
         
@@ -87,10 +90,46 @@ class Music_Model:
 
     def get_feat(self, feat_name, signal, sample_rate):
         if feat_name == "mfcc":
-            return librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
+            return librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length).T.tolist()
         if feat_name == "mel_spec":
-            return librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+            return librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length).T.tolist()
+        if feat_name == "mel_spec_mfcc":
+            mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
+            mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+            combined = np.concatenate((mfcc, mel), axis=0)
+            return combined.T.tolist()
+        if feat_name == "multifeat":
+            return self.get_multifeat(signal, sample_rate).tolist()
+        if feat_name == "feat_mean_var":
+            return self.get_feat_mean_var(signal, sample_rate).tolist()
 
+
+    def get_multifeat(self, signal, sample_rate):
+        zero_cross = librosa.feature.zero_crossing_rate(y=signal, hop_length=self._hop_length)
+        mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
+        mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+        stft = np.abs(librosa.stft(y=signal))
+        chroma = librosa.feature.chroma_stft(S=stft, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+        combined = np.concatenate((zero_cross, mfcc, mel, chroma), axis=0)
+        return combined.T
+
+
+    def get_feat_mean_var(self, signal, sample_rate):
+        zero_cross = librosa.feature.zero_crossing_rate(y=signal, hop_length=self._hop_length).T
+        zero_cross_mean = np.mean(zero_cross, axis=0)
+        zero_cross_var = np.var(zero_cross, axis=0)
+        mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length).T
+        mfcc_mean = np.mean(mfcc, axis=0)
+        mfcc_var = np.var(mfcc, axis=0)
+        mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length).T
+        mel_mean = np.mean(mel, axis=0)
+        mel_var = np.var(mel, axis=0)
+        stft = np.abs(librosa.stft(y=signal))
+        chroma = librosa.feature.chroma_stft(S=stft, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length).T
+        chroma_mean = np.mean(chroma, axis=0)
+        chroma_var = np.var(chroma, axis=0)
+        return np.concatenate((zero_cross_mean, zero_cross_var, mfcc_mean, mfcc_var, mel_mean, mel_var, chroma_mean, chroma_var), axis=0)
+            
 
     def get_mfcc_source(self):
         return f"{self._data_source_path}mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
@@ -100,6 +139,18 @@ class Music_Model:
         return f"{self._data_source_path}melspec_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
+    def get_mel_mfcc_source(self):
+        return f"{self._data_source_path}mel_mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
+
+    
+    def get_multifeat_source(self):
+        return f"{self._data_source_path}multifeat_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
+    
+
+    def get_feat_mean_var_source(self):
+        return f"{self._data_source_path}feat_mean_var_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
+
+
     def generate_wavelet(self):
         pass
 
@@ -107,7 +158,6 @@ class Music_Model:
     #####################################
     #              Model                #
     ##################################### 
-
 
     def plot_NN_history(self, history):
         fig, axs = plt.subplots(2)
@@ -138,6 +188,21 @@ class Music_Model:
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
         # self.plot_NN_history(history)
+        return test_loss, test_acc
+
+
+    #####################################
+    #      Model - Feature-based        #
+    ##################################### 
+
+    def normal_NN_1D(self, X, y):
+        model = Sequential([
+            Dense(512, activation='relu', input_shape=(X.shape[1],), kernel_regularizer=l2(0.02)),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dense(len(self._moods), activation="softmax")
+        ])
+        return self._NN(model, X, y, "Normal NN")
 
 
     def normal_NN(self, X, y):
@@ -148,7 +213,7 @@ class Music_Model:
             Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
             Dense(len(self._moods), activation="softmax")
         ])
-        self._NN(model, X, y, "Normal NN")
+        return self._NN(model, X, y, "Normal NN")
 
     
     def lstm_NN(self, X, y):
@@ -159,7 +224,7 @@ class Music_Model:
             Dropout(0.3),
             Dense(len(self._moods), activation="softmax")
         ])
-        self._NN(model, X, y, "LSTM NN")
+        return self._NN(model, X, y, "LSTM NN")
 
 
     def cnn(self, X, y):
@@ -177,31 +242,49 @@ class Music_Model:
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
             Dense(len(self._moods), activation="softmax")
         ])
-        self._NN(model, X, y, "CNN")
+        return self._NN(model, X, y, "CNN")
 
 
     def run_NN(self, X, y):
-        self.normal_NN(X, y)
-        self.lstm_NN(X, y)
-        self.cnn(X, y)
+        return [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
+
 
     def run_mfcc_NN(self):
         X, y = self.load_feature(self._audio_mfcc_source, "mfcc")
-        self.run_NN(X, y)
+        return self.run_NN(X, y)
 
 
     def run_mel_spectrogram_NN(self):
         X, y = self.load_feature(self._audio_mel_spec_source, "mel_spec")
-        self.run_NN(X, y)
+        return self.run_NN(X, y)
+
+    def run_mel_mfcc_NN(self):
+        X, y = self.load_feature(self._audio_mel_mfcc_source, "mel_spec_mfcc")
+        return self.run_NN(X, y)
+
+
+    def run_multifeat_NN(self):
+        X, y = self.load_feature(self._audio_multifeat_source, "multifeat")
+        return self.run_NN(X, y)
+
+    
+    def run_feat_mean_var_NN(self):
+        X, y = self.load_feature(self._audio_feat_mean_var_source, "feat_mean_var")
+        return [self.normal_NN_1D(X, y)]
+        
 
     def run(self):
-        self.run_mfcc_NN()
-        self.run_mel_spectrogram_NN()
+        data = {
+            "mfcc": self.run_mfcc_NN(),
+            "mel_spec": self.run_mel_spectrogram_NN(),
+            "mel_mfcc": self.run_mel_mfcc_NN(),
+            "multifeat": self.run_multifeat_NN(),
+            "feat_mean_var": self.run_feat_mean_var_NN()
+        }
         
+        for k, v in data.items():
+            print(f"{k}: {','.join([f'[loss: {nn[0]}, acc: {nn[1]}]' for nn in v])}")
     
 
 model1 = Music_Model(512, 2048, 20)
 model1.run()
-
-# model2 = Music_Model(256, 4096, 20)
-# model2.run()
