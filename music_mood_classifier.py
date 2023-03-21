@@ -59,6 +59,10 @@ class Music_Model:
         print(f"{self._audio_class_source} Created...")
 
 
+    #####################################
+    #     Data Process - Feature        #
+    ##################################### 
+
     def load_feature(self, path, feat_name):
         if not os.path.exists(path):
             self.extract_feature(path, feat_name)
@@ -151,8 +155,26 @@ class Music_Model:
         return f"{self._data_source_path}feat_mean_var_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
-    def generate_wavelet(self):
-        pass
+    #####################################
+    #     Data Process - Images         #
+    ##################################### 
+
+    def generate_melspectrogram(self):
+        count = 0
+        with tqdm(total=self._total, desc=f"Generating MelSpectrograms...") as pbar:
+            for audio, path, label in self._audio_class_info.itertuples(index=False):
+                count += 1
+                signal, sample_rate = librosa.load(path, sr=self._sample_rate)
+                mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+                mel_db = librosa.power_to_db(mel, ref=np.max)
+                # Display the spectrogram
+                plt.figure(figsize=(10, 4))
+                librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
+                plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
+                fig = plt.gcf()
+                fig.savefig(f'{self._data_source_path}melspectrograms/{label}_{count}.png')
+                plt.close()
+                pbar.update(1)
 
 
     #####################################
@@ -287,4 +309,4 @@ class Music_Model:
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.run()
+model1.generate_melspectrogram()
