@@ -325,17 +325,24 @@ class Music_Model:
     def cnn(self, X, y):
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
         model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=X.shape[1:]),
+            Conv2D(32, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
-            Conv2D(128, (3, 3), activation='relu', padding="valid", kernel_regularizer=l2(0.01)),
+            Conv2D(128, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
-            Conv2D(128, (3, 3), activation='relu', padding="valid", kernel_regularizer=l2(0.01)),
+            Conv2D(256, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            MaxPooling2D(2, padding="same"),
+            Dropout(0.3),
+            Conv2D(512, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
             GlobalAveragePooling2D(),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
             Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
@@ -343,7 +350,7 @@ class Music_Model:
 
 
     def run_NN(self, X, y):
-        return [self.lstm_NN(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
+        return [self.cnn(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
 
 
     def run_feat_NN(self, feat_name):
