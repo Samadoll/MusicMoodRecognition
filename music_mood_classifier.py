@@ -7,13 +7,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import json
 import glob
+import random
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D
+from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization
 from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
+from keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
 from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
@@ -27,8 +29,11 @@ class Music_Model:
     
     def __init__(self, hop_length=512, num_fft=2048, num_mfcc=20):
         # Default Values
-        self._tag = "S"
         self._moods = ["happy", "sad"] # ["aggressive", "dramatic", "happy", "romantic", "sad"]
+        # 500 for small (S), >500 for large (L)
+        self._tag = "L"
+        self._files_per_feat = 1000
+        self._total = self._files_per_feat * len(self._moods)
         self._output_layer_activation = "sigmoid" # "softmxax"
         self._NN_loss_func = "binary_crossentropy" # "sparse_categorical_crossentropy"
         self._output_layer_dim = 1
@@ -38,8 +43,6 @@ class Music_Model:
         self._mfcc_visual_path = "ProcessedData/mfccVisual/"
         self._audio_class_source = f"{self._data_source_path}baseInfo_{self._tag}.csv"
         self._sample_rate = 44100
-        # 2500 for small (S), 10133 for large (L)
-        self._total = 500 * len(self._moods)
         self._plot_path = f"ProcessedData/plots/{str(time.time())}/"
 
         # Variables
@@ -63,8 +66,10 @@ class Music_Model:
         with open(self._audio_class_source, "w") as info_file:
             info_file.write("audio_name,audio_path,mood\n")
             for c in self._moods:
-                for audio in os.listdir(f"{self._audio_source_path}{c}/"):
-                    info_file.write(f"{audio},{self._audio_source_path}{c}/{audio},{c}\n")
+                audio_path = f"{self._audio_source_path}{c}/"
+                audios = os.listdir(audio_path) if self._files_per_feat == 500 else random.sample(os.listdir(audio_path), self._files_per_feat)
+                for audio in audios:
+                    info_file.write(f"{audio},{audio_path}/{audio},{c}\n")
         print(f"{self._audio_class_source} Created...")
 
 
@@ -260,9 +265,10 @@ class Music_Model:
 
     def _NN(self, model, X, y, name):
         print(f"Training {name}...")
+        callback = EarlyStopping(patience=10)
         X_train, X_val, X_test, y_train, y_val, y_test = self.split_NN_data(X, y)
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=50, batch_size=32, verbose=1)
+        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=200, batch_size=32, callbacks=[callback], verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
         self.plot_NN_history(history, name.replace(" ", "_"), f"{name}\nacc: {'{:.2f}'.format(test_acc * 100)}%, loss: {test_loss}")
@@ -285,12 +291,15 @@ class Music_Model:
     def normal_NN(self, X, y):
         model = Sequential([
             Flatten(input_shape=(X.shape[1], X.shape[2])),
-            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.4),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.4),
             Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.4),
+            BatchNormalization(),
+            Dropout(0.3),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            BatchNormalization(),
+            Dropout(0.3),
+            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
+            BatchNormalization(),
+            Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return self._NN(model, X, y, f"{self._current_feat} Normal NN")
@@ -298,11 +307,15 @@ class Music_Model:
     
     def lstm_NN(self, X, y):
         model = Sequential([
-            LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
+            LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
             Dropout(0.3),
-            LSTM(64, kernel_regularizer=l2(0.01)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
             Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            LSTM(64, kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
             Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
@@ -330,7 +343,7 @@ class Music_Model:
 
 
     def run_NN(self, X, y):
-        return [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
+        return [self.lstm_NN(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
 
 
     def run_feat_NN(self, feat_name):
@@ -454,7 +467,7 @@ class Music_Model:
     ##################################### 
 
     def run(self):
-        feats = ["mfcc", "mel_spec", "mel_mfcc", "multifeat", "feat_mean_var"]
+        feats = ["mfcc"] # ["mfcc", "mel_spec", "mel_mfcc", "multifeat", "feat_mean_var"]
         data = {k: self.run_feat_NN(k) for k in feats}
         for k, v in data.items():
             print(f"{k}: {','.join([f'[loss: {nn[0]}, acc: {nn[1]}]' for nn in v])}")
