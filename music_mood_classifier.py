@@ -19,33 +19,35 @@ from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
 import tensorflow as tf
 from sklearn import preprocessing
+import warnings
+import time
 
 
 class Music_Model:
     
     def __init__(self, hop_length=512, num_fft=2048, num_mfcc=20):
         # Default Values
-        # 2500 for small (S), 10133 for large (L)
-        self._total = 2500
         self._tag = "S"
-        self._moods = ["aggressive", "dramatic", "happy", "romantic", "sad"]
+        self._moods = ["happy", "sad"] # ["aggressive", "dramatic", "happy", "romantic", "sad"]
+        self._output_layer_activation = "sigmoid" # "softmxax"
+        self._NN_loss_func = "binary_crossentropy" # "sparse_categorical_crossentropy"
+        self._output_layer_dim = 1
         self._audio_source_path = f"music_mood_{self._tag}/"
         self._data_source_path = "ProcessedData/"
         self._mel_spectrograms_path = "ProcessedData/melspectrograms/"
         self._mfcc_visual_path = "ProcessedData/mfccVisual/"
         self._audio_class_source = f"{self._data_source_path}baseInfo_{self._tag}.csv"
         self._sample_rate = 44100
+        # 2500 for small (S), 10133 for large (L)
+        self._total = 500 * len(self._moods)
+        self._plot_path = f"ProcessedData/plots/{str(time.time())}"
 
         # Variables
         self._audio_class_info = self.load_class_info()
         self._hop_length = hop_length
         self._num_fft = num_fft
         self._num_mfcc = num_mfcc
-        self._audio_mfcc_source = self.get_mfcc_source()
-        self._audio_mel_spec_source = self.get_mel_spec_source()
-        self._audio_mel_mfcc_source = self.get_mel_mfcc_source()
-        self._audio_multifeat_source = self.get_multifeat_source()
-        self._audio_feat_mean_var_source = self.get_feat_mean_var_source()
+        self._current_feat = ""
 
     #####################################
     #           Data Process            #
@@ -107,7 +109,7 @@ class Music_Model:
             return librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length).T.tolist()
         if feat_name == "mel_spec":
             return librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length).T.tolist()
-        if feat_name == "mel_spec_mfcc":
+        if feat_name == "mel_mfcc":
             mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
             mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
             combined = np.concatenate((mfcc, mel), axis=0)
@@ -145,24 +147,10 @@ class Music_Model:
         return np.concatenate((zero_cross_mean, zero_cross_var, mfcc_mean, mfcc_var, mel_mean, mel_var, chroma_mean, chroma_var), axis=0)
             
 
-    def get_mfcc_source(self):
-        return f"{self._data_source_path}mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
-
-
-    def get_mel_spec_source(self):
-        return f"{self._data_source_path}melspec_{self._num_fft}_{self._hop_length}_{self._tag}.json"
-
-
-    def get_mel_mfcc_source(self):
-        return f"{self._data_source_path}mel_mfcc_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
-
-    
-    def get_multifeat_source(self):
-        return f"{self._data_source_path}multifeat_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
-    
-
-    def get_feat_mean_var_source(self):
-        return f"{self._data_source_path}feat_mean_var_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
+    def get_json_source(self, feat_name):
+        if feat_name == "mel_spec":
+            return f"{self._data_source_path}mel_spec_{self._num_fft}_{self._hop_length}_{self._tag}.json"
+        return f"{self._data_source_path}{feat_name}_{self._num_mfcc}_{self._num_fft}_{self._hop_length}_{self._tag}.json"
 
 
     #####################################
@@ -224,7 +212,9 @@ class Music_Model:
             librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
         elif feat_name == "mfcc":
             mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
-            mfcc_scale = preprocessing.scale(mfcc, axis=1)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                mfcc_scale = preprocessing.scale(mfcc, axis=1)
             librosa.display.specshow(mfcc_scale, sr=sample_rate)
 
         plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
@@ -262,7 +252,7 @@ class Music_Model:
     def _NN(self, model, X, y, name):
         print(f"Training {name}...")
         X_train, X_val, X_test, y_train, y_val, y_test = self.split_NN_data(X, y)
-        model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
+        model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
         history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=50, batch_size=32, verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
@@ -273,33 +263,41 @@ class Music_Model:
     def normal_NN_1D(self, X, y):
         model = Sequential([
             Dense(512, activation='relu', input_shape=(X.shape[1],), kernel_regularizer=l2(0.02)),
+            Dropout(0.4),
             Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.4),
             Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dense(len(self._moods), activation="softmax")
+            Dropout(0.4),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        return self._NN(model, X, y, "Normal NN")
+        return self._NN(model, X, y, f"{self._current_feat} Normal NN")
 
 
     def normal_NN(self, X, y):
         model = Sequential([
             Flatten(input_shape=(X.shape[1], X.shape[2])),
             Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.4),
             Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.4),
             Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dense(len(self._moods), activation="softmax")
+            Dropout(0.4),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        return self._NN(model, X, y, "Normal NN")
+        return self._NN(model, X, y, f"{self._current_feat} Normal NN")
 
     
     def lstm_NN(self, X, y):
         model = Sequential([
             LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
-            LSTM(64),
+            Dropout(0.3),
+            LSTM(64, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(len(self._moods), activation="softmax")
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        return self._NN(model, X, y, "LSTM NN")
+        return self._NN(model, X, y, f"{self._current_feat} LSTM NN")
 
 
     def cnn(self, X, y):
@@ -307,46 +305,33 @@ class Music_Model:
         model = Sequential([
             Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
-            Conv2D(128, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            Conv2D(128, (3, 3), activation='relu', padding="valid", kernel_regularizer=l2(0.01)),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
-            Conv2D(128, (3, 3), activation='relu', padding="valid"),
+            Conv2D(128, (3, 3), activation='relu', padding="valid", kernel_regularizer=l2(0.01)),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
             GlobalAveragePooling2D(),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
-            Dense(len(self._moods), activation="softmax")
+            Dropout(0.3),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        return self._NN(model, X, y, "CNN")
+        return self._NN(model, X, y, f"{self._current_feat} CNN")
 
 
     def run_NN(self, X, y):
         return [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
 
 
-    def run_mfcc_NN(self):
-        X, y = self.load_feature(self._audio_mfcc_source, "mfcc")
-        return self.run_NN(X, y)
-
-
-    def run_mel_spectrogram_NN(self):
-        X, y = self.load_feature(self._audio_mel_spec_source, "mel_spec")
-        return self.run_NN(X, y)
-
-
-    def run_mel_mfcc_NN(self):
-        X, y = self.load_feature(self._audio_mel_mfcc_source, "mel_spec_mfcc")
-        return self.run_NN(X, y)
-
-
-    def run_multifeat_NN(self):
-        X, y = self.load_feature(self._audio_multifeat_source, "multifeat")
-        return self.run_NN(X, y)
-
-    
-    def run_feat_mean_var_NN(self):
-        X, y = self.load_feature(self._audio_feat_mean_var_source, "feat_mean_var")
-        return [self.normal_NN_1D(X, y)]
+    def run_feat_NN(self, feat_name):
+        self._current_feat = feat_name
+        if feat_name == "feat_mean_var":
+            X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+            return [self.normal_NN_1D(X, y)]
+        else:
+            X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+            return self.run_NN(X, y)
 
 
     #####################################
@@ -359,12 +344,12 @@ class Music_Model:
             self.split_images(feat_name)
 
         batch_size = 16
-        train_size = 1600
-        val_size = 400
-        test_size = 500
+        train_size = self._total * 0.8 * 0.8
+        val_size = self._total * 0.8 * 0.2
+        test_size = self._total * 0.2
         target_dim = (300, 300)
         
-        train_datagen = ImageDataGenerator(rescale=1./255)
+        train_datagen = ImageDataGenerator(rescale=1./255, zoom_range=0.3, shear_range=0.3)
         val_datagen = ImageDataGenerator(rescale=1./255)
         test_datagen = ImageDataGenerator(rescale=1./255)
         train_set = train_datagen.flow_from_directory(f"{visual_path}train", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
@@ -388,9 +373,9 @@ class Music_Model:
             GlobalAveragePooling2D(),
             Flatten(),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
-            Dense(len(self._moods), activation="softmax")
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
+        model.compile(loss=self._NN_loss_func, optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
         history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
         loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
         print(f"{feat_name} ImageDataGenerator CNN Accuracy: {acc}")
@@ -419,7 +404,7 @@ class Music_Model:
     def run_vgg16_ImageGenerator_NN(self, feat_name):
         batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set = self.img_ImageGenerator_pre(feat_name)
         model = self.get_vgg16_cnn_model(target_dim + (3,))
-        model.compile(loss='categorical_crossentropy', optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
+        model.compile(loss=self._NN_loss_func, optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
         history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
         loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
         print(f"{feat_name} VGG16 ImageDataGenerator CNN Accuracy: {acc}")
@@ -442,7 +427,7 @@ class Music_Model:
             Dropout(0.3),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(len(self._moods), activation="softmax")
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         for layer in vgg16_model.layers:
             layer.trainable = False
@@ -451,8 +436,8 @@ class Music_Model:
 
     def run_img(self, feat_name):
         # self.run_img_ImageGenerator_NN(feat_name)
-        # self.run_vgg16_CNN(feat_name)
-        self.run_vgg16_ImageGenerator_NN(feat_name)
+        self.run_vgg16_CNN(feat_name)
+        # self.run_vgg16_ImageGenerator_NN(feat_name)
 
 
     #####################################
@@ -460,17 +445,11 @@ class Music_Model:
     ##################################### 
 
     def run(self):
-        data = {
-            "mfcc": self.run_mfcc_NN(),
-            "mel_spec": self.run_mel_spectrogram_NN(),
-            "mel_mfcc": self.run_mel_mfcc_NN(),
-            "multifeat": self.run_multifeat_NN(),
-            "feat_mean_var": self.run_feat_mean_var_NN()
-        }
-        
+        feats = ["mfcc", "mel_spec", "mel_mfcc", "multifeat", "feat_mean_var"]
+        data = {k: self.run_feat_NN(k) for k in feats}
         for k, v in data.items():
             print(f"{k}: {','.join([f'[loss: {nn[0]}, acc: {nn[1]}]' for nn in v])}")
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.run_img("mfcc")
+model1.run()
