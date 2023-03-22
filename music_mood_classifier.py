@@ -40,7 +40,7 @@ class Music_Model:
         self._sample_rate = 44100
         # 2500 for small (S), 10133 for large (L)
         self._total = 500 * len(self._moods)
-        self._plot_path = f"ProcessedData/plots/{str(time.time())}"
+        self._plot_path = f"ProcessedData/plots/{str(time.time())}/"
 
         # Variables
         self._audio_class_info = self.load_class_info()
@@ -228,19 +228,28 @@ class Music_Model:
     #      Model - Feature-based        #
     ##################################### 
 
-    def plot_NN_history(self, history):
-        fig, axs = plt.subplots(2)
-        axs[0].plot(history.history["accuracy"], label="training")
-        axs[0].plot(history.history["val_accuracy"], label="validation")
-        axs[0].set_ylabel("Accuracy")
-        axs[0].legend()
+    def plot_NN_history(self, history, name, title):
+        if not os.path.exists(self._plot_path):
+            os.makedirs(self._plot_path)
+        fig, ax = plt.subplots()
+        ax.plot(history.history["accuracy"], label="training")
+        ax.plot(history.history["val_accuracy"], label="validation")
+        ax.set_title(title)
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Accuracy")
+        ax.legend()
+        plt.savefig(f"{self._plot_path}{name}_accuracy.png")
 
-        axs[1].plot(history.history["loss"], label="training")
-        axs[1].plot(history.history["val_loss"], label="validation")
-        axs[1].set_ylabel("Error")
-        axs[1].set_xlabel("Epoch")
-        axs[1].legend()
-        plt.show()
+        fig, ax = plt.subplots()
+        ax.plot(history.history["loss"], label="training")
+        ax.plot(history.history["val_loss"], label="validation")
+        ax.set_title(title)
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.legend()
+        plt.savefig(f"{self._plot_path}{name}_loss.png")
+        plt.clf()
+        plt.close()
 
 
     def split_NN_data(self, X, y):
@@ -256,7 +265,7 @@ class Music_Model:
         history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=50, batch_size=32, verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
-        # self.plot_NN_history(history)
+        self.plot_NN_history(history, name.replace(" ", "_"), f"{name}\nacc: {'{:.2f}'.format(test_acc * 100)}%, loss: {test_loss}")
         return test_loss, test_acc
 
 
@@ -451,5 +460,5 @@ class Music_Model:
             print(f"{k}: {','.join([f'[loss: {nn[0]}, acc: {nn[1]}]' for nn in v])}")
     
 
-model1 = Music_Model(512, 2048, 20)
+model1 = Music_Model()
 model1.run()
