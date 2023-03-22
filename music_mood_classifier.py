@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
 import tensorflow as tf
+from sklearn import preprocessing
 
 
 class Music_Model:
@@ -31,6 +32,7 @@ class Music_Model:
         self._audio_source_path = f"music_mood_{self._tag}/"
         self._data_source_path = "ProcessedData/"
         self._mel_spectrograms_path = "ProcessedData/melspectrograms/"
+        self._mfcc_visual_path = "ProcessedData/mfccVisual/"
         self._audio_class_source = f"{self._data_source_path}baseInfo_{self._tag}.csv"
         self._sample_rate = 44100
 
@@ -167,53 +169,69 @@ class Music_Model:
     #     Data Process - Images         #
     ##################################### 
 
-    def generate_melspectrogram(self):
-        img_folder = f"{self._mel_spectrograms_path}all/"
+    def generate_visual(self, feat_name):
+        img_folder = self.get_feat_visual_path(feat_name)
         if not os.path.exists(img_folder):
             os.makedirs(img_folder)
         count = 0
-        with tqdm(total=self._total, desc=f"Generating MelSpectrograms...") as pbar:
+        with tqdm(total=self._total, desc=f"Generating {feat_name} Visual...") as pbar:
             for audio, path, label in self._audio_class_info.itertuples(index=False):
                 count += 1
-                self.generate_img_helper(img_folder, path, label, count)
+                self.generate_img_helper(img_folder, path, label, count, feat_name)
                 pbar.update(1)
 
 
-    def split_images(self):
+    def get_feat_visual_path(self, feat_name):
+        if feat_name == "mel":
+            return f"{self._mel_spectrograms_path}all/"
+        if feat_name == "mfcc":
+            return f"{self._mfcc_visual_path}scaled/"
+
+    
+    def get_feat_visual_split_path(self, feat_name):
+        if feat_name == "mel":
+            return self._mel_spectrograms_path
+        if feat_name == "mfcc":
+            return self._mfcc_visual_path
+
+
+    def split_images(self, feat_name):
         X_train, X_test, y_train, y_test = train_test_split(self._audio_class_info.iloc[:,:-1], self._audio_class_info.iloc[:,-1], test_size=0.2, random_state=42)
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
-        self.split_images_helper(X_train["audio_path"], y_train, "train")
-        self.split_images_helper(X_val["audio_path"], y_val, "valid")
-        self.split_images_helper(X_test["audio_path"], y_test, "test")
+        self.split_images_helper(X_train["audio_path"], y_train, "train", feat_name)
+        self.split_images_helper(X_val["audio_path"], y_val, "valid", feat_name)
+        self.split_images_helper(X_test["audio_path"], y_test, "test", feat_name)
 
 
-    def split_images_helper(self, x, y, tag):
+    def split_images_helper(self, x, y, tag, feat_name):
         count = 0
-        with tqdm(total=len(x), desc=f"Generating {tag} MelSpectrograms...") as pbar:
+        with tqdm(total=len(x), desc=f"Generating {tag} {feat_name} Visual...") as pbar:
             for path, label in zip(x, y):
-                img_folder = f"{self._mel_spectrograms_path}{tag}/{label}/"
+                img_folder = f"{self.get_feat_visual_split_path(feat_name)}{tag}/{label}/"
                 if not os.path.exists(img_folder):
                     os.makedirs(img_folder)
                 count += 1
-                self.generate_img_helper(img_folder, path, label, count)
+                self.generate_img_helper(img_folder, path, label, count, feat_name)
                 pbar.update(1)
 
 
-    def generate_img_helper(self, folder, path, label, count):
+    def generate_img_helper(self, folder, path, label, count, feat_name):
         signal, sample_rate = librosa.load(path, sr=self._sample_rate)
-        mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
-        mel_db = librosa.power_to_db(mel, ref=np.max)
-        # plt.figure(figsize=(10, 4))
-        librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
+        
+        if feat_name == "mel":
+            mel = librosa.feature.melspectrogram(y=signal, sr=sample_rate, n_fft=self._num_fft, hop_length=self._hop_length)
+            mel_db = librosa.power_to_db(mel, ref=np.max)
+            librosa.display.specshow(mel_db, sr=sample_rate, fmax=8000)
+        elif feat_name == "mfcc":
+            mfcc = librosa.feature.mfcc(y=signal, sr=sample_rate, n_fft=self._num_fft, n_mfcc=self._num_mfcc, hop_length=self._hop_length)
+            mfcc_scale = preprocessing.scale(mfcc, axis=1)
+            librosa.display.specshow(mfcc_scale, sr=sample_rate)
+
         plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
         fig = plt.gcf()
         fig.savefig(f'{folder}{label}_{count}.png')
         plt.clf()
         plt.close()
-
-
-    def load_melspectrogram(self):
-        return pd.read_csv(self._audio_class_source)
 
 
     #####################################
@@ -337,7 +355,7 @@ class Music_Model:
 
     def melspectrogram_img_ImageGenerator_pre(self):
         if not os.path.exists(self._mel_spectrograms_path):
-            self.split_images()
+            self.split_images("mel")
 
         batch_size = 16
         train_size = 1600
@@ -345,7 +363,7 @@ class Music_Model:
         test_size = 500
         target_dim = (300, 300)
         
-        train_datagen = ImageDataGenerator(rescale=1./255, rotation_range=20, zoom_range=0.2, horizontal_flip=True)
+        train_datagen = ImageDataGenerator(rescale=1./255)
         val_datagen = ImageDataGenerator(rescale=1./255)
         test_datagen = ImageDataGenerator(rescale=1./255)
         train_set = train_datagen.flow_from_directory(f"{self._mel_spectrograms_path}train", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
@@ -382,7 +400,7 @@ class Music_Model:
         img_folder = f"{self._mel_spectrograms_path}all/"
         if not os.path.exists(img_folder):
             os.makedirs(img_folder)
-            self.generate_melspectrogram()
+            self.generate_visual("mel")
         imgs = []
         mood = []
         for img in glob.glob(f"{img_folder}*.png"):
@@ -461,4 +479,4 @@ class Music_Model:
     
 
 model1 = Music_Model(512, 2048, 20)
-model1.run_melspectrogram_img()
+model1.split_images("mfcc")
