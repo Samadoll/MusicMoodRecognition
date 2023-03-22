@@ -413,6 +413,13 @@ class Music_Model:
         vgg16_model = VGG16(weights='imagenet', include_top=False, input_shape=target_dim + (3,))
         model = Sequential([
             vgg16_model,
+            Conv2D(32, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            Conv2D(64, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            Conv2D(128, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            GlobalAveragePooling2D(),
             Flatten(),
             Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
