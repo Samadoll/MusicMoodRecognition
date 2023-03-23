@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization
+from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D
 from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 from keras.callbacks import EarlyStopping
@@ -268,6 +268,7 @@ class Music_Model:
         callback = EarlyStopping(patience=10)
         X_train, X_val, X_test, y_train, y_val, y_test = self.split_NN_data(X, y)
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
+        # model.summary()
         history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=200, batch_size=32, callbacks=[callback], verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
@@ -325,7 +326,7 @@ class Music_Model:
     def cnn(self, X, y):
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
         model = Sequential([
-            Conv2D(32, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
+            Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
             Conv2D(128, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
@@ -346,11 +347,38 @@ class Music_Model:
             Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
-        return self._NN(model, X, y, f"{self._current_feat} CNN")
+        return self._NN(model, X, y, f"{self._current_feat} CNN 2D")
+
+
+    def cnn_1d(self, X, y):
+        drop = 0.3
+        model = Sequential([
+            Conv1D(64, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            MaxPooling1D(3, padding="same"),
+            Dropout(drop),
+            Conv1D(128, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            MaxPooling1D(3, padding="same"),
+            Dropout(drop),
+            Conv1D(256, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            MaxPooling1D(3, padding="same"),
+            Dropout(drop),
+            Conv1D(512, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            MaxPooling1D(3, padding="same"),
+            Dropout(drop),
+            GlobalAveragePooling1D(),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(drop),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(drop),
+            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(drop),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        ])
+        return self._NN(model, X, y, f"{self._current_feat} CNN 1D")
 
 
     def run_NN(self, X, y):
-        return [self.cnn(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
+        return [self.cnn(X, y), self.cnn_1d(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
 
 
     def run_feat_NN(self, feat_name):
