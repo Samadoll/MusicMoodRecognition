@@ -393,8 +393,9 @@ class Music_Model:
 
     #####################################
     #        Model - Image-based        #
-    ##################################### 
-
+    #####################################
+    #  ImageGenerator Not Good for This #
+    #####################################
     def img_ImageGenerator_pre(self, feat_name):
         visual_path = self.get_feat_visual_split_path(feat_name)
         if not os.path.exists(visual_path):
@@ -404,9 +405,9 @@ class Music_Model:
         train_size = self._total * 0.8 * 0.8
         val_size = self._total * 0.8 * 0.2
         test_size = self._total * 0.2
-        target_dim = (300, 300)
+        target_dim = (640, 480)
         
-        train_datagen = ImageDataGenerator(rescale=1./255, zoom_range=0.3, shear_range=0.3)
+        train_datagen = ImageDataGenerator(rescale=1./255)
         val_datagen = ImageDataGenerator(rescale=1./255)
         test_datagen = ImageDataGenerator(rescale=1./255)
         train_set = train_datagen.flow_from_directory(f"{visual_path}train", target_size=target_dim, batch_size=batch_size, class_mode='categorical')
@@ -418,6 +419,7 @@ class Music_Model:
 
     def run_img_ImageGenerator_NN(self, feat_name):
         batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set = self.img_ImageGenerator_pre(feat_name)
+        callback = EarlyStopping(patience=10)
         model = model = Sequential([
             Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=target_dim + (3, )),
             MaxPooling2D(2, padding="same"),
@@ -433,31 +435,12 @@ class Music_Model:
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         model.compile(loss=self._NN_loss_func, optimizer=RMSprop(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, verbose=2)
+        history = model.fit(train_set, steps_per_epoch=train_size // batch_size, epochs=30, validation_data=val_set, validation_steps=val_size // batch_size, callbacks=[callback], verbose=2)
         loss, acc = model.evaluate(test_set, steps=test_size // batch_size)
         print(f"{feat_name} ImageDataGenerator CNN Accuracy: {acc}")
         return loss, acc
-        
+
     
-    def run_vgg16_CNN(self, feat_name):
-        img_folder = self.get_feat_visual_path(feat_name)
-        if not os.path.exists(img_folder):
-            os.makedirs(img_folder)
-            self.generate_visual(feat_name)
-        imgs = []
-        mood = []
-        for img in glob.glob(f"{img_folder}*.png"):
-            img_name = img.replace(img_folder, "")
-            image=np.array(tf.keras.preprocessing.image.load_img(img, color_mode='rgb', target_size=(640,480)))
-            imgs.append(image)
-            mood.append(self._moods.index(img_name[0:img_name.index("_")]))
-        X = np.array(imgs)
-        y = np.array(mood)
-        print("Data Loaded...")
-        model = self.get_vgg16_cnn_model(X.shape[1:])
-        return self._NN(model, X, y, f"{feat_name} VGG16_CNN")
-
-
     def run_vgg16_ImageGenerator_NN(self, feat_name):
         batch_size, train_size, val_size, test_size, target_dim, train_set, val_set, test_set = self.img_ImageGenerator_pre(feat_name)
         model = self.get_vgg16_cnn_model(target_dim + (3,))
@@ -467,8 +450,32 @@ class Music_Model:
         print(f"{feat_name} VGG16 ImageDataGenerator CNN Accuracy: {acc}")
         return loss, acc
         
+    
+    #####################################
+    #     Model - Image-based  CNN      #
+    #####################################
 
-    def get_vgg16_cnn_model(self, dim):
+    def run_img_CNN(self, feat_name, method_name):
+        self._current_feat = feat_name
+        img_folder = self.get_feat_visual_path(feat_name)
+        if not os.path.exists(img_folder):
+            os.makedirs(img_folder)
+            self.generate_visual(feat_name)
+        imgs = []
+        mood = []
+        for img in glob.glob(f"{img_folder}*.png"):
+            img_name = img.replace(img_folder, "")
+            image=np.array(tf.keras.preprocessing.image.load_img(img, color_mode='rgb', target_size=(300,300)))
+            imgs.append(image)
+            mood.append(self._moods.index(img_name[0:img_name.index("_")]))
+        X = np.array(imgs)
+        y = np.array(mood)
+        print("Data Loaded...")
+        model = self.get_vgg16_cnn_img_model(X.shape[1:]) if method_name == "VGG16" else self.get_cnn_img_model(X.shape[1:])
+        return self._NN(model, X, y, f"{feat_name} {method_name} Image_CNN")
+        
+
+    def get_vgg16_cnn_img_model(self, dim):
         vgg16_model = VGG16(weights='imagenet', include_top=False, input_shape=dim)
         model = Sequential([
             vgg16_model,
@@ -479,7 +486,6 @@ class Music_Model:
             Conv2D(128, (3, 3), activation='relu', padding="valid"),
             Dropout(0.3),
             GlobalAveragePooling2D(),
-            Flatten(),
             Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
             Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
@@ -491,10 +497,26 @@ class Music_Model:
         return model
 
 
+    def get_cnn_img_model(self, dim):
+        model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', padding="valid", input_shape=dim),
+            Dropout(0.3),
+            Conv2D(64, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            Conv2D(128, (3, 3), activation='relu', padding="valid"),
+            Dropout(0.3),
+            GlobalAveragePooling2D(),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        ])
+        return model
+
+
     def run_img(self, feat_name):
-        # self.run_img_ImageGenerator_NN(feat_name)
-        self.run_vgg16_CNN(feat_name)
-        # self.run_vgg16_ImageGenerator_NN(feat_name)
+        self.run_img_CNN(feat_name, "VGG16")
 
 
     #####################################
@@ -509,4 +531,4 @@ class Music_Model:
     
 
 model1 = Music_Model()
-model1.run()
+model1.run_img("mel")
