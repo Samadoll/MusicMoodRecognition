@@ -269,7 +269,7 @@ class Music_Model:
         X_train, X_val, X_test, y_train, y_val, y_test = self.split_NN_data(X, y)
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
         # model.summary()
-        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=200, batch_size=32, callbacks=[callback], verbose=1)
+        history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=200, batch_size=32, verbose=1)
         test_loss, test_acc = model.evaluate(X_test, y_test)
         print(f"{name} Accuracy: {test_acc}")
         self.plot_NN_history(history, name.replace(" ", "_"), f"{name}\nacc: {'{:.2f}'.format(test_acc * 100)}%, loss: {test_loss}")
@@ -353,7 +353,7 @@ class Music_Model:
     def cnn_1d(self, X, y):
         drop = 0.3
         model = Sequential([
-            Conv1D(64, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            Conv1D(64, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02), input_shape=X.shape[1:]),
             MaxPooling1D(3, padding="same"),
             Dropout(drop),
             Conv1D(128, 3, activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
@@ -378,7 +378,7 @@ class Music_Model:
 
 
     def run_NN(self, X, y):
-        return [self.cnn(X, y), self.cnn_1d(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
+        return [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y), self.cnn_1d(X, y)] # [self.normal_NN(X, y), self.lstm_NN(X, y), self.cnn(X, y)]
 
 
     def run_feat_NN(self, feat_name):
@@ -515,20 +515,27 @@ class Music_Model:
         return model
 
 
-    def run_img(self, feat_name):
+    def run_img_NN_helper(self, feat_name):
+        self.run_img_CNN(feat_name, "VGG16")
         self.run_img_CNN(feat_name, "VGG16")
 
+    
+    def run_img(self):
+        feats = ["mel", "mfcc"]
+        for feat in feats:
+            self.run_img_NN_helper(feat)
 
     #####################################
     #               Run                 #
     ##################################### 
 
     def run(self):
-        feats = ["mfcc"] # ["mfcc", "mel_spec", "mel_mfcc", "multifeat", "feat_mean_var"]
+        feats = ["mfcc", "mel_spec", "mel_mfcc", "multifeat", "feat_mean_var"]
         data = {k: self.run_feat_NN(k) for k in feats}
         for k, v in data.items():
             print(f"{k}: {','.join([f'[loss: {nn[0]}, acc: {nn[1]}]' for nn in v])}")
     
 
 model1 = Music_Model()
-model1.run_img("mel")
+# model1.run_img()
+model1.run()
