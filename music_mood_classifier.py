@@ -392,6 +392,109 @@ class Music_Model:
 
 
     #####################################
+    #            RUN Easy               #
+    ##################################### 
+    def run_easy(self):
+        feats = ["mfcc", "mel_spec", "mel_mfcc", "multifeat"]
+        historys = {
+            "mfcc": {},
+            "mel_spec": {},
+            "mel_mfcc": {},
+            "multifeat": {}
+        }
+        for feat_name in feats:
+            print(f"Training {feat_name}...")
+            X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+            # NN
+            print(f"Training {feat_name} NN...")
+            model = Sequential([
+                Flatten(input_shape=(X.shape[1], X.shape[2])),
+                Dense(64, activation='relu'),
+                Dense(self._output_layer_dim, activation=self._output_layer_activation)
+            ])
+            historys[feat_name]["NN"] = self.run_easy_history(model, X, y)
+            # LSTM
+            print(f"Training {feat_name} LSTM...")
+            model = Sequential([
+                LSTM(128, input_shape=(X.shape[1], X.shape[2])),
+                Dense(self._output_layer_dim, activation=self._output_layer_activation)
+            ])
+            historys[feat_name]["LSTM"] = self.run_easy_history(model, X, y)
+            # 1D CNN
+            print(f"Training {feat_name} 1D CNN...")
+            model = Sequential([
+                Conv1D(64, 3, activation='relu', padding="valid", input_shape=X.shape[1:]),
+                Flatten(),
+                Dense(64, activation='relu'),
+                Dense(self._output_layer_dim, activation=self._output_layer_activation)
+            ])
+            historys[feat_name]["CNN_1D"] = self.run_easy_history(model, X, y)
+            # 2D CNN
+            print(f"Training {feat_name} 2D CNN...")
+            X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
+            model = Sequential([
+                Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
+                GlobalAveragePooling2D(),
+                Dense(64, activation='relu'),
+                Dense(self._output_layer_dim, activation=self._output_layer_activation)
+            ])
+            historys[feat_name]["CNN_2D"] = self.run_easy_history(model, X, y)
+        print("ALL DONE")
+        self.plot_easy_models(historys, feats)
+    
+
+    def run_easy_history(self, model, X, y):
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+        model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
+        return model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=30, batch_size=32, verbose=1)
+
+    def plot_easy_models(self, histories, feats):
+        easy_path = f"ProcessedData/plots/easy_{str(time.time())}/"
+        os.makedirs(easy_path)
+        models = ["NN", "LSTM", "CNN_1D", "CNN_2D"]
+        colors = {"NN": "r", "LSTM": "g", "CNN_1D": "b", "CNN_2D": "c"}
+        colors_f = {"mfcc": "r", "mel_spec": "g", "mel_mfcc": "b", "multifeat": "c"}
+
+        for feat_name in feats:
+            # Accuracy
+            fig, ax = plt.subplots()
+            for model in models:
+                ax.plot(histories[feat_name][model].history["accuracy"], label=f"{model}_train", color=colors[model])
+                ax.plot(histories[feat_name][model].history["val_accuracy"], label=f"{model}_valid", linestyle='dashed', color=colors[model])
+            ax.set_title(f"{feat_name} Accuracy")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Accuracy")
+            ax.legend()
+            plt.savefig(f"{easy_path}{feat_name}_accuracy.png")
+            
+            # Loss
+            fig, ax = plt.subplots()
+            for model in models:
+                # ax.plot(histories[feat_name][model].history["loss"], label=f"{model}_train", color=colors[model])
+                ax.plot(histories[feat_name][model].history["val_loss"], label=f"{model}_valid", linestyle='dashed', color=colors[model])
+            ax.set_title(f"{feat_name} Loss")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Loss")
+            ax.legend()
+            plt.savefig(f"{easy_path}{feat_name}_loss.png")
+            plt.clf()
+            plt.close()
+
+        for model in models:
+            fig, ax = plt.subplots()
+            for feat_name in feats:
+                ax.plot(histories[feat_name][model].history["accuracy"], label=f"{feat_name}_train", color=colors_f[feat_name])
+                ax.plot(histories[feat_name][model].history["val_accuracy"], label=f"{feat_name}_valid", linestyle='dashed', color=colors_f[feat_name])
+            ax.set_title(f"{model} Accuracy")
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel("Accuracy")
+            ax.legend()
+            plt.savefig(f"{easy_path}{model}_accuracy.png")
+            plt.clf()
+            plt.close()
+
+
+    #####################################
     #        Model - Image-based        #
     #####################################
     #  ImageGenerator Not Good for This #
@@ -538,4 +641,5 @@ class Music_Model:
 
 model1 = Music_Model()
 # model1.run_img()
-model1.run()
+# model1.run()
+model1.run_easy()
