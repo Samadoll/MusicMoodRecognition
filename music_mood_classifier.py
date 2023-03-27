@@ -23,6 +23,8 @@ import tensorflow as tf
 from sklearn import preprocessing
 import warnings
 import time
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import classification_report
 
 
 class Music_Model:
@@ -189,7 +191,7 @@ class Music_Model:
 
 
     def split_images(self, feat_name):
-        X_train, X_test, y_train, y_test = train_test_split(self._audio_class_info.iloc[:,:-1], self._audio_class_info.iloc[:,-1], test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(self._audio_class_info.iloc[:,:-1], self._audio_class_info.iloc[:,-1], test_size=0.3, random_state=42)
         X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
         self.split_images_helper(X_train["audio_path"], y_train, "train", feat_name)
         self.split_images_helper(X_val["audio_path"], y_val, "valid", feat_name)
@@ -392,6 +394,64 @@ class Music_Model:
 
 
     #####################################
+    #           Model - NN Dev          #
+    #####################################
+    def run_dev_get_model(self, X, y):
+        model = Sequential([
+            LSTM(128, input_shape=(X.shape[1], X.shape[2])),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        ])
+        return model
+
+    def run_dev_load_history(self, index, path):
+        if index == 0:
+            return []
+        histories = []
+        for i in range(index):
+            with open(f"{path}_{i}.json", "r") as f:
+                histories.append(json.load(f))
+        return histories
+        
+
+    def run_nn_dev(self):
+        model_plot_save_path = "ProcessedData/plots/dev/"
+        feat_name = "mel_spec"
+        X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+        model_index = 0
+        histories = self.run_dev_load_history(model_index, model_plot_save_path)
+        colors = ["r", "g", "b", "c"]
+
+        model = self.run_dev_get_model(X, y)
+
+        model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
+        history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=300, batch_size=32, verbose=1)
+        histories.append(history)
+
+        fig, ax = plt.subplots()
+        for i, h in enumerate(histories):
+            ax.plot(h.history["accuracy"], label=f"train{i}", color=colors[i])
+            ax.plot(h.history["val_accuracy"], label=f"valid{i}", linestyle='dashed', color=colors[i])
+        ax.set_title(f"Accuracy")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Accuracy")
+        ax.legend()
+        plt.savefig(f"{model_plot_save_path}{model_index}_accuracy.png")
+            
+            # Loss
+        fig, ax = plt.subplots()
+        for i, h in enumerate(histories):
+            ax.plot(h.history["loss"], label=f"train{i}", color=colors[i])
+            ax.plot(h.history["val_loss"], label=f"valid{i}", linestyle='dashed', color=colors[i])
+        ax.set_title(f"Loss")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.legend()
+        plt.savefig(f"{model_plot_save_path}{model_index}_loss.png")
+        plt.clf()
+        plt.close()
+
+    #####################################
     #        Model - Image-based        #
     #####################################
     #  ImageGenerator Not Good for This #
@@ -538,4 +598,5 @@ class Music_Model:
 
 model1 = Music_Model()
 # model1.run_img()
-model1.run()
+# model1.run()
+model1.run_nn_dev()
