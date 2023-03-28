@@ -357,23 +357,14 @@ class Music_Model:
         model = Sequential([
             Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(128, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            Conv2D(128, (2, 2), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(256, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
-            MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(512, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            Conv2D(256, (2, 2), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
             GlobalAveragePooling2D(),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
+            Dense(64, activation='relu'),
+            Dense(128, activation='relu'),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return self._NN(model, X, y, f"{self._current_feat} CNN 2D")
