@@ -365,6 +365,7 @@ class Music_Model:
             GlobalAveragePooling2D(),
             Dense(64, activation='relu'),
             Dense(128, activation='relu'),
+            Dense(256, activation='relu'),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return self._NN(model, X, y, f"{self._current_feat} CNN 2D")
