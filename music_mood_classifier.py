@@ -398,20 +398,9 @@ class Music_Model:
     #####################################
     def run_dev_get_model(self, X, y):
         model = Sequential([
-            LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            LSTM(64, kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(64, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
+            Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
+            GlobalAveragePooling2D(),
+            Dense(64, activation='relu'),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return model
@@ -431,6 +420,8 @@ class Music_Model:
         model_plot_save_path = "ProcessedData/plots/dev_CNN/"
         feat_name = "mel_spec"
         X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+        X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
+        
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
         histories = self.run_dev_load_history(model_index, model_plot_save_path)
         colors = ["r", "g", "b", "c", "black"]
