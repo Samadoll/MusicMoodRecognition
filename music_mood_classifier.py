@@ -398,7 +398,20 @@ class Music_Model:
     #####################################
     def run_dev_get_model(self, X, y):
         model = Sequential([
-            LSTM(128, input_shape=(X.shape[1], X.shape[2])),
+            LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            LSTM(64, kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(64, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
+            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return model
@@ -414,24 +427,26 @@ class Music_Model:
         
 
     def run_nn_dev(self):
-        model_plot_save_path = "ProcessedData/plots/dev/"
+        model_index = 0
+        model_plot_save_path = "ProcessedData/plots/dev_CNN/"
         feat_name = "mel_spec"
         X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-        model_index = 0
         histories = self.run_dev_load_history(model_index, model_plot_save_path)
-        colors = ["r", "g", "b", "c"]
+        colors = ["r", "g", "b", "c", "black"]
 
         model = self.run_dev_get_model(X, y)
 
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=300, batch_size=32, verbose=1)
-        histories.append(history)
+        history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=200, batch_size=32, verbose=1)
+        with open(f"{model_plot_save_path}_{model_index}.json", "w") as f:
+            json.dump(history.history, f)
+        histories.append(history.history)
 
         fig, ax = plt.subplots()
         for i, h in enumerate(histories):
-            ax.plot(h.history["accuracy"], label=f"train{i}", color=colors[i])
-            ax.plot(h.history["val_accuracy"], label=f"valid{i}", linestyle='dashed', color=colors[i])
+            ax.plot(h["accuracy"], label=f"train{i}", color=colors[i])
+            ax.plot(h["val_accuracy"], label=f"valid{i}", linestyle='dashed', color=colors[i])
         ax.set_title(f"Accuracy")
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Accuracy")
@@ -441,8 +456,8 @@ class Music_Model:
             # Loss
         fig, ax = plt.subplots()
         for i, h in enumerate(histories):
-            ax.plot(h.history["loss"], label=f"train{i}", color=colors[i])
-            ax.plot(h.history["val_loss"], label=f"valid{i}", linestyle='dashed', color=colors[i])
+            # ax.plot(h.history["loss"], label=f"train{i}", color=colors[i])
+            ax.plot(h["val_loss"], label=f"valid{i}", color=colors[i])
         ax.set_title(f"Loss")
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
