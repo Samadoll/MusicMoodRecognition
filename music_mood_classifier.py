@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D
+from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D, concatenate
 from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 from keras.callbacks import EarlyStopping
@@ -310,15 +310,25 @@ class Music_Model:
     
     def lstm_NN(self, X, y):
         model = Sequential([
-            LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            LSTM(64, kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(64, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
@@ -330,23 +340,15 @@ class Music_Model:
         model = Sequential([
             Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(128, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            Conv2D(128, (2, 2), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(256, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
-            MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            Conv2D(512, (2, 2), activation='relu', padding="valid", kernel_regularizer=l2(0.02)),
+            Conv2D(256, (2, 2), activation='relu', padding="valid"),
             MaxPooling2D(2, padding="same"),
             Dropout(0.3),
             GlobalAveragePooling2D(),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
-            Dense(512, activation='relu', kernel_regularizer=l2(0.02)),
-            Dropout(0.3),
+            Dense(64, activation='relu'),
+            Dense(128, activation='relu'),
+            Dense(256, activation='relu'),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return self._NN(model, X, y, f"{self._current_feat} CNN 2D")
@@ -396,7 +398,34 @@ class Music_Model:
     #####################################
     #           Model - NN Dev          #
     #####################################
-    def run_dev_get_model(self, X, y):
+    def run_dev_get_LSTM(self, X, y):
+        LSTM = Sequential([
+            LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(64, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        ])
+        return model
+
+    def run_dev_get_CNN(self, X, y):
+        X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
         model = Sequential([
             Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
             MaxPooling2D(2, padding="same"),
@@ -413,6 +442,18 @@ class Music_Model:
         ])
         return model
 
+    def run_dev_get_model(self, X, y):
+        lstm = self.run_dev_get_LSTM(X, y)
+        CNN = self.run_dev_get_CNN(X, y)
+
+        combined = Sequential([
+            concatenate([lstm, CNN]),
+            Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        ])
+
+        return combined
+
+
     def run_dev_load_history(self, index, path):
         if index == 0:
             return []
@@ -424,20 +465,26 @@ class Music_Model:
         
 
     def run_nn_dev(self):
-        model_index = 3
-        model_plot_save_path = "ProcessedData/plots/dev_CNN/"
+        model_index = 0
+        model_plot_save_path = "ProcessedData/plots/dev_Combined/"
         feat_name = "mel_spec"
+
         X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
-        X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
         
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+        X_train_reshape = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2], 1)
+        X_test_reshape = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2], 1)
+
         histories = self.run_dev_load_history(model_index, model_plot_save_path)
         colors = ["r", "g", "b", "c", "black"]
 
         model = self.run_dev_get_model(X, y)
 
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-        history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=200, batch_size=32, verbose=1)
+
+        history = model.fit([X_train, X_train_reshape], y_train, validation_data=([X_test, X_test_reshape], y_test), epochs=200, batch_size=32, verbose=1)
+
         with open(f"{model_plot_save_path}_{model_index}.json", "w") as f:
             json.dump(history.history, f)
         histories.append(history.history)
