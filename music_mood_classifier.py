@@ -307,19 +307,48 @@ class Music_Model:
 
     
     def lstm_NN(self, X, y):
+        # model 3
         model = Sequential([
-            LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            LSTM(64, kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
             Dropout(0.3),
-            Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            LSTM(128, kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+            Dropout(0.3),
+            Dense(64, activation='relu', kernel_regularizer=l2(0.01)),
             Dropout(0.3),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
+        # model 4
+        # model = Sequential([
+        #     LSTM(256, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     LSTM(64, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(64, activation='relu', kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     Dense(128, activation='relu', kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     Dense(256, activation='relu', kernel_regularizer=l2(0.02)),
+        #     Dropout(0.3),
+        #     Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        # ])
         return self._NN(model, X, y, f"{self._current_feat} LSTM NN")
 
 
