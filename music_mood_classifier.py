@@ -487,8 +487,12 @@ class Music_Model:
         lstm_input, lstm_output = self.run_dev_get_LSTM(X, y)
         CNN_input, CNN_output = self.run_dev_get_CNN(X, y)
 
-        merged = concatenate([lstm_output, CNN_output])
-        output = Dense(self._output_layer_dim, activation=self._output_layer_activation)(merged)
+        x1 = concatenate([lstm_output, CNN_output])
+        x1 = Dense(64, activation="relu")(x1)
+        x1 = Dense(128, activation="relu")(x1)
+        x1 = Dense(256, activation="relu")(x1)
+        x1 = Dense(512, activation="relu")(x1)
+        output = Dense(self._output_layer_dim, activation=self._output_layer_activation)(x1)
 
         model = Model(inputs=[lstm_input, CNN_input], outputs=output)
         return model
@@ -527,7 +531,7 @@ class Music_Model:
         model = self.run_dev_get_model(X, y)
 
         model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-
+        # model.summary()
         history = model.fit([X_train, X_train_reshape], y_train, validation_data=([X_test, X_test_reshape], y_test), epochs=200, batch_size=32, verbose=1)
 
         with open(f"{model_plot_save_path}_{model_index}.json", "w") as f:
