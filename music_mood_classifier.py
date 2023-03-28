@@ -399,8 +399,16 @@ class Music_Model:
     def run_dev_get_model(self, X, y):
         model = Sequential([
             Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
+            MaxPooling2D(2, padding="same"),
+            Conv2D(128, (2, 2), activation='relu', padding="valid"),
+            MaxPooling2D(2, padding="same"),
+            Conv2D(256, (2, 2), activation='relu', padding="valid"),
+            MaxPooling2D(2, padding="same"),
+            Dropout(0.3),
             GlobalAveragePooling2D(),
             Dense(64, activation='relu'),
+            Dense(128, activation='relu'),
+            Dense(256, activation='relu'),
             Dense(self._output_layer_dim, activation=self._output_layer_activation)
         ])
         return model
@@ -416,7 +424,7 @@ class Music_Model:
         
 
     def run_nn_dev(self):
-        model_index = 0
+        model_index = 3
         model_plot_save_path = "ProcessedData/plots/dev_CNN/"
         feat_name = "mel_spec"
         X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
