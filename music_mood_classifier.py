@@ -11,8 +11,8 @@ import random
 import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D, concatenate
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D, concatenate, Input
 from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
 from keras.callbacks import EarlyStopping
@@ -399,59 +399,104 @@ class Music_Model:
     #           Model - NN Dev          #
     #####################################
     def run_dev_get_LSTM(self, X, y):
-        LSTM = Sequential([
-            LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            LSTM(128, kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(64, activation='relu', kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(self._output_layer_dim, activation=self._output_layer_activation)
-        ])
-        return model
+        input1 = Input(shape=(X.shape[1], X.shape[2]))
+        x1 = LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))(input1)
+        x1 = Dropout(0.3)(x1)
+        x1 = LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = LSTM(128, kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = Dense(128, activation='relu', kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = Dense(128, activation='relu', kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = Dense(128, activation='relu', kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = Dense(64, activation='relu', kernel_regularizer=l2(0.01))(x1)
+        x1 = Dropout(0.3)(x1)
+        output = Dense(self._output_layer_dim, activation=self._output_layer_activation)(x1)
+        return input1, output
+
+        # model = Sequential([
+        #     Input(shape=(X.shape[1], X.shape[2])),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     LSTM(128, kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(64, activation='relu', kernel_regularizer=l2(0.01)),
+        #     Dropout(0.3),
+        #     Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        # ])
+        # return model
 
     def run_dev_get_CNN(self, X, y):
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2], 1)
-        model = Sequential([
-            Conv2D(64, (2, 2), activation='relu', padding="valid", input_shape=X.shape[1:]),
-            MaxPooling2D(2, padding="same"),
-            Conv2D(128, (2, 2), activation='relu', padding="valid"),
-            MaxPooling2D(2, padding="same"),
-            Conv2D(256, (2, 2), activation='relu', padding="valid"),
-            MaxPooling2D(2, padding="same"),
-            Dropout(0.3),
-            GlobalAveragePooling2D(),
-            Dense(64, activation='relu'),
-            Dense(128, activation='relu'),
-            Dense(256, activation='relu'),
-            Dense(self._output_layer_dim, activation=self._output_layer_activation)
-        ])
-        return model
+        input1 = Input(shape=X.shape[1:])
+        x1 = Conv2D(64, (2, 2), activation='relu', padding="valid")(input1)
+        x1 = MaxPooling2D(2, padding="same")(x1)
+        x1 = Conv2D(128, (2, 2), activation='relu', padding="valid")(x1)
+        x1 = MaxPooling2D(2, padding="same")(x1)
+        x1 = Conv2D(256, (2, 2), activation='relu', padding="valid")(x1)
+        x1 = MaxPooling2D(2, padding="same")(x1)
+        x1 = Dropout(0.3)(x1)
+        x1 = GlobalAveragePooling2D()(x1)
+        x1 = Dense(64, activation='relu')(x1)
+        x1 = Dense(128, activation='relu')(x1)
+        x1 = Dense(256, activation='relu')(x1)
+        output = Dense(self._output_layer_dim, activation=self._output_layer_activation)(x1)
+        return input1, output
+
+        # model = Sequential([
+        #     Input(shape=X.shape[1:]),
+        #     Conv2D(64, (2, 2), activation='relu', padding="valid"),
+        #     MaxPooling2D(2, padding="same"),
+        #     Conv2D(128, (2, 2), activation='relu', padding="valid"),
+        #     MaxPooling2D(2, padding="same"),
+        #     Conv2D(256, (2, 2), activation='relu', padding="valid"),
+        #     MaxPooling2D(2, padding="same"),
+        #     Dropout(0.3),
+        #     GlobalAveragePooling2D(),
+        #     Dense(64, activation='relu'),
+        #     Dense(128, activation='relu'),
+        #     Dense(256, activation='relu'),
+        #     Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        # ])
+        # return model
 
     def run_dev_get_model(self, X, y):
-        lstm = self.run_dev_get_LSTM(X, y)
-        CNN = self.run_dev_get_CNN(X, y)
+        lstm_input, lstm_output = self.run_dev_get_LSTM(X, y)
+        CNN_input, CNN_output = self.run_dev_get_CNN(X, y)
 
-        combined = Sequential([
-            concatenate([lstm, CNN]),
-            Dense(self._output_layer_dim, activation=self._output_layer_activation)
-        ])
+        merged = concatenate([lstm_output, CNN_output])
+        output = Dense(self._output_layer_dim, activation=self._output_layer_activation)(merged)
 
-        return combined
+        model = Model(inputs=[lstm_input, CNN_input], outputs=output)
+        return model
+        # combined = Sequential([
+        #     concatenate([lstm, CNN]),
+        #     Dense(self._output_layer_dim, activation=self._output_layer_activation)
+        # ])
+        # return combined
 
 
     def run_dev_load_history(self, index, path):
