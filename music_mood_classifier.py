@@ -25,6 +25,7 @@ import warnings
 import time
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 
 class Music_Model:
@@ -33,7 +34,7 @@ class Music_Model:
         # Default Values
         self._moods = ["happy", "sad"] # ["aggressive", "dramatic", "happy", "romantic", "sad"]
         # 500 for small (S), >500 for large (L)
-        self._tag = "1000"
+        self._tag = "L"
         self._files_per_feat = 1000
         self._total = self._files_per_feat * len(self._moods)
         self._output_layer_activation = "sigmoid" # "softmxax"
@@ -567,41 +568,37 @@ class Music_Model:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
         X_test_reshape = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2], 1)
+        model = tf.keras.models.load_model("other/model.h5")
+        # model = self.run_dev_get_model(X, y)
+        # model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
+        # kfold = StratifiedKFold(n_splits=5, shuffle=True)
 
-        model = self.run_dev_get_model(X, y)
-        model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
-        kfold = StratifiedKFold(n_splits=5, shuffle=True)
+        # best_weight_path = "ProcessedData/best_weight.h5"
+        # model_path = "ProcessedData/model.h5"
+        # checkpoint = ModelCheckpoint(best_weight_path, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
 
-        best_weight_path = "ProcessedData/best_weight.h5"
-        model_path = "ProcessedData/model.h5"
-        checkpoint = ModelCheckpoint(best_weight_path, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
+        # for train, val in kfold.split(X_train, y_train):
+        #     X_train_data = X_train[train]
+        #     X_train_data_reshape = X_train_data.reshape(X_train_data.shape[0], X_train_data.shape[1], X_train_data.shape[2], 1)
+        #     y_train_data = y_train[train]
 
-        for train, val in kfold.split(X_train, y_train):
-            X_train_data = X_train[train]
-            X_train_data_reshape = X_train_data.reshape(X_train_data.shape[0], X_train_data.shape[1], X_train_data.shape[2], 1)
-            y_train_data = y_train[train]
+        #     X_val_data = X_train[val]
+        #     X_val_data_reshape = X_val_data.reshape(X_val_data.shape[0], X_val_data.shape[1], X_val_data.shape[2], 1)
+        #     y_val_data = y_train[val]
 
-            X_val_data = X_train[val]
-            X_val_data_reshape = X_val_data.reshape(X_val_data.shape[0], X_val_data.shape[1], X_val_data.shape[2], 1)
-            y_val_data = y_train[val]
+        #     model.fit([X_train_data, X_train_data_reshape], y_train_data, validation_data=([X_val_data, X_val_data_reshape], y_val_data), epochs=200, batch_size=32, verbose=1, callbacks=[checkpoint])
 
-            model.fit([X_train_data, X_train_data_reshape], y_train_data, validation_data=([X_val_data, X_val_data_reshape], y_val_data), epochs=200, batch_size=32, verbose=1, callbacks=[checkpoint])
-
-        model.save(model_path)
+        # model.save(model_path)
         test_loss, test_acc = model.evaluate([X_test, X_test_reshape], y_test)
-        print(f"Acc: {test_acc}, Loss: {test_loss}")
-        y_pred = model.predict([X_test, X_test_reshape])
+        y_pred = np.round(model.predict([X_test, X_test_reshape]))
 
-        print(classification_report(y_test, y_pred))
-        report = classification_report(y_test, y_pred, output_dict=True)
-        report_df = pd.DataFrame(report).transpose()
-
-        # plot heatmap
-        sns.heatmap(report_df.iloc[:-3, :].astype(float), annot=True, cmap='Blues', cbar=False)
-        plt.title('Classification Report')
-        plt.savefig(f"ProcessedData/LSTM_CNN_result.png")
-        plt.clf()
-        plt.close()
+        report = classification_report(y_test, y_pred, target_names=self._moods)
+        print(report)
+        print(f"Test Accuracy: {test_acc}, Test Loss: {test_loss}")
+        cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self._moods)
+        disp.plot()
+        plt.show()
 
 
     #####################################
