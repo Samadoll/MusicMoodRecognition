@@ -15,7 +15,7 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Dropout, Flatten, LSTM, Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Conv1D, MaxPooling1D, GlobalAveragePooling1D, concatenate, Input
 from keras.optimizers import Adam, RMSprop
 from keras.regularizers import l2
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping,ModelCheckpoint
 import matplotlib.pyplot as plt
 from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
@@ -561,6 +561,48 @@ class Music_Model:
         plt.clf()
         plt.close()
 
+    def run_nn_dev_kfold(self):
+        feat_name = "mel_spec"
+        X, y = self.load_feature(self.get_json_source(feat_name), feat_name)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+        X_test_reshape = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2], 1)
+
+        model = self.run_dev_get_model(X, y)
+        kfold = StratifiedKFold(n_splits=5, shuffle=True)
+
+        best_weight_path = "ProcessedData/best_weight.h5"
+        model_path = "ProcessedData/model.h5"
+        checkpoint = ModelCheckpoint(best_weight_path, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
+
+        for train, val in kfold.split(X_train, y_train):
+            X_train_data = X_train[train]
+            X_train_data_reshape = X_train_data.reshape(X_train_data.shape[0], X_train_data.shape[1], X_train_data.shape[2], 1)
+            y_train_data = y_train[train]
+
+            X_val_data = X_train[val]
+            X_val_data_reshape = X_val_data.reshape(X_val_data.shape[0], X_val_data.shape[1], X_val_data.shape[2], 1)
+            y_val_data = y_train[val]
+
+            model.fit([X_train_data, X_train_data_reshape], y_train_data, validation_data=([X_val_data, X_val_data_reshape], y_val_data), epochs=200, batch_size=32, verbose=1, callbacks=[checkpoint])
+
+        model.save(model_path)
+        test_loss, test_acc = model.evaluate([X_test, X_test_reshape], y_test)
+        print(f"Acc: {test_acc}, Loss: {test_loss}")
+        y_pred = model.predict([X_test, X_test_reshape])
+
+        print(classification_report(y_test, y_pred))
+        report = classification_report(y_test, y_pred, output_dict=True)
+        report_df = pd.DataFrame(report).transpose()
+
+        # plot heatmap
+        sns.heatmap(report_df.iloc[:-3, :].astype(float), annot=True, cmap='Blues', cbar=False)
+        plt.title('Classification Report')
+        plt.savefig(f"ProcessedData/LSTM_CNN_result.png")
+        plt.clf()
+        plt.close()
+
+
     #####################################
     #        Model - Image-based        #
     #####################################
@@ -709,4 +751,4 @@ class Music_Model:
 model1 = Music_Model()
 # model1.run_img()
 # model1.run()
-model1.run_nn_dev()
+model1.run_nn_dev_kfold()
