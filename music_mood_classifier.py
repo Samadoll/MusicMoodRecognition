@@ -33,7 +33,7 @@ class Music_Model:
         # Default Values
         self._moods = ["happy", "sad"] # ["aggressive", "dramatic", "happy", "romantic", "sad"]
         # 500 for small (S), >500 for large (L)
-        self._tag = "L"
+        self._tag = "1000"
         self._files_per_feat = 1000
         self._total = self._files_per_feat * len(self._moods)
         self._output_layer_activation = "sigmoid" # "softmxax"
@@ -569,6 +569,7 @@ class Music_Model:
         X_test_reshape = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2], 1)
 
         model = self.run_dev_get_model(X, y)
+        model.compile(loss=self._NN_loss_func, optimizer=Adam(learning_rate=0.0001), metrics=['accuracy'])
         kfold = StratifiedKFold(n_splits=5, shuffle=True)
 
         best_weight_path = "ProcessedData/best_weight.h5"
