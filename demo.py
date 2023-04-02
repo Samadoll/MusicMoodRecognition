@@ -12,9 +12,13 @@ def process_audio(audio):
 
 def predict_audio(audio):
     x = process_audio(audio)
-    y = model.predict(x)[0][0]
-    return "sad" if y > 0.5 else "happy"
+    y = model.predict(x)[0][0].item()
+    confidences = {
+        "happy": round(1 - y, 2),
+        "sad": round(y, 2)
+    }
+    return confidences
 
-demo = gr.Interface(fn=predict_audio, inputs=gr.Audio(type="filepath"), outputs="text")
+demo = gr.Interface(fn=predict_audio, inputs=gr.Audio(type="filepath"), outputs="label")
 
 demo.launch()
